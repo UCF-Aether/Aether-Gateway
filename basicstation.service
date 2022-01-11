@@ -1,0 +1,11 @@
+[Unit]
+Description=Basic Station LoRaWAN packet forwarder
+
+[Service]
+User=root
+WorkingDirectory=/etc/aether
+ExecStart=/usr/bin/station
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
