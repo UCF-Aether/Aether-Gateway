@@ -1,0 +1,56 @@
+---
+- name: Bootstrap RPi LoRaWAN Basic Station gateway
+  hosts: all
+  remote_user: root
+  
+  tasks:
+    - name: "Install boot config"
+      ansible.builtin.copy:
+        src: ./config.txt
+        dest: /boot/config.txt
+
+    - name: "Install kernel cmdline args"
+      ansible.builtin.copy:
+        src: ./cmdline.txt
+        dest: /boot/cmdline.txt
+
+    - name: Initialize pacman keyring
+      ansible.builtin.shell: pacman-key --init
+
+    - name: Populate ARM
+      ansible.builtin.shell: pacman-key --populate archlinuxarm
+
+    - name: Update system
+      community.general.pacman:
+        update_cache: yes
+        upgrade: yes
+
+    - name: Install packages
+      community.general.pacman:
+        state: present
+        name:
+          - ntp
+          - jq
+          - gcc
+          - devtools
+          - binutils
+          - make
+          - glibc
+          - usbutils
+          - coreutils
+          - curl
+          - gzip
+          - iw
+          - elfutils
+          - findutils
+          - raspberrypi-firmware
+          - i2c-tools
+          - lm_sensors
+
+    - name: Configure time
+      ansible.builtin.shell: |
+        timedatectl set-timezone UTC
+        timedatectl set-ntp true
+
+    - name: Install Basic Station
+      ansible.builtin.script: ./install-basicstation.sh
