@@ -1,6 +1,5 @@
 #!/bin/bash
 # Followed: https://catalog.us-east-1.prod.workshops.aws/v2/workshops/b95a6659-bd4f-4567-8307-bddb43a608c4/en-US/700-advanced/dyigw-rak2245
-# Gateway id function from: https://github.com/RAKWireless/rak_common_for_gateway/blob/master/rak/rak/shell_script/rak_common.sh
 
 spi_file=./deps/lgw/platform-rpi/libloragw/src/loragw_spi.native.c
 temp_dir=/tmp/aether-gateway
@@ -17,6 +16,7 @@ if [ "$EUID" -ne 0 ]
   exit
 fi
 
+# Gateway id function from: https://github.com/RAKWireless/rak_common_for_gateway/blob/master/rak/rak/shell_script/rak_common.sh
 get_gw_id() {
     GATEWAY_EUI_NIC="eth0"
     if [[ `grep "$GATEWAY_EUI_NIC" /proc/net/dev` == "" ]]; then
@@ -59,8 +59,9 @@ cp -f ./build-rpi-std/bin/station /usr/bin
 
 # Create Aether config dir, and copy files
 mkdir -p $cfg_dir
-cat ./station.json | sed "s/GATEWAY_EUI/$(get_gw_id)/" > $cfg_dir/station.json
+cat ./station.json | sed "s/<GATEWAY_EUI>/$(get_gw_id)/" > $cfg_dir/station.json
 cp -f ./basicstation.service /etc/systemd/systemd
+cp -f ./init.sh $cfg_dir
 
 # Reload service spi_files 
 systemctl daemon-reload
