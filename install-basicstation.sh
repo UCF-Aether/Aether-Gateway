@@ -67,3 +67,6 @@ cp -f ./init.sh $cfg_dir
 systemctl daemon-reload
 systemctl enable basicstation
 systemctl start basicstation
+
+echo "Finished installing Basic Station"
+ehco "Systemd 'basicstation' started"
