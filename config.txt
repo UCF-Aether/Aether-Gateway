@@ -2,12 +2,9 @@
 # http://rpf.io/configtxt
 # Some settings may impact device functionality. See link above for details
 # vim: ft=conf
+dtdebug=on
 dtoverlay=vc4-kms-v3d
 initramfs initramfs-linux.img followkernel
-
-[pi4]
-# Run as fast as firmware / board allows
-arm_boost=1
 
 hdmi_blanking=1
 disable_splash=1
@@ -31,4 +28,3 @@ dtparam=audio=off
 dtoverlay=disable-bt
 
 enable_uart=1
-
