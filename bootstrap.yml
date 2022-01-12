@@ -77,6 +77,8 @@
         timedatectl set-timezone UTC
         timedatectl set-ntp true
 
+    - name: Reboot system for changes to take effect
+      ansible.builtin.reboot:
 
 - name: Install Basic Station
   hosts: all
