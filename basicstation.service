@@ -4,7 +4,7 @@ Description=Basic Station LoRaWAN packet forwarder
 [Service]
 User=root
 WorkingDirectory=/etc/aether
-ExecStart=/usr/bin/station --home=/etc/aether --log-file=/var/aether/station.log --radio-init /etc/aether/init.sh --force
+ExecStart=/usr/bin/station --home=/etc/aether --radio-init /etc/aether/init.sh --force
 Restart=always
 
 [Install]

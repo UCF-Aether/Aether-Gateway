@@ -1,24 +1,45 @@
 ---
 - name: Bootstrap RPi LoRaWAN Basic Station gateway
   hosts: all
-  remote_user: root
-  
+  remote_user: alarm
+  become: yes
+  become_method: su
+  become_user: root
+  gather_facts: no
+
+  # https://blog.knoldus.com/how-to-install-python-in-target-host-using-ansible/
+  pre_tasks:
+    - name: Check vars
+      assert:
+        that:
+          - gateway_name != ""
+
+    - name: Initialize pacman keyring
+      raw: pacman-key --init
+      ignore_errors: yes
+
+    - name: Populate ARM
+      raw: pacman-key --populate archlinuxarm
+      ignore_errors: yes
+
+    - name: Update mirrors
+      raw: pacman -Syy --noconfirm 
+      ignore_errors: yes
+
+    - name: Install Python
+      raw: pacman -S --noconfirm --needed python
+      ignore_errors: yes
+
   tasks:
-    - name: "Install boot config"
+    - name: Install boot config
       ansible.builtin.copy:
         src: ./config.txt
         dest: /boot/config.txt
 
-    - name: "Install kernel cmdline args"
+    - name: Install kernel cmdline args
       ansible.builtin.copy:
         src: ./cmdline.txt
         dest: /boot/cmdline.txt
-
-    - name: Initialize pacman keyring
-      ansible.builtin.shell: pacman-key --init
-
-    - name: Populate ARM
-      ansible.builtin.shell: pacman-key --populate archlinuxarm
 
     - name: Update system
       community.general.pacman:
@@ -29,12 +50,16 @@
       community.general.pacman:
         state: present
         name:
+          - inetutils
+          - sudo
+          - man
           - ntp
           - jq
           - gcc
           - devtools
           - binutils
           - make
+          - cmake
           - glibc
           - usbutils
           - coreutils
@@ -52,5 +77,89 @@
         timedatectl set-timezone UTC
         timedatectl set-ntp true
 
+
+- name: Install Basic Station
+  hosts: all
+  remote_user: alarm
+  become: yes
+  become_method: su
+  become_user: root
+  vars:
+    install_path: /etc/aether
+
+  tasks:
+    - name: Generate gateway EUI
+      ansible.builtin.shell: |
+        RAND_MAC=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null|md5sum|sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\)\(..\).*$/\1:\2:\3:\4:\5:\6/')
+        GATEWAY_EUI=$(echo $RAND_MAC | awk -F\: '{print $1$2$3"FFFE"$4$5$6}')
+        GATEWAY_EUI=${GATEWAY_EUI^^}
+        echo $GATEWAY_EUI
+
+      register: eui
+
+    - name: Set fact 
+      set_fact:
+        eui: "{{ eui.stdout }}"
+
     - name: Install Basic Station
       ansible.builtin.script: ./install-basicstation.sh
+      args:
+        creates: /usr/bin/station
+
+    - name: Install templated station config
+      ansible.builtin.template:
+        src: ./station.j2
+        dest: "{{ install_path }}/station.conf"
+
+    - name: Install remaining station config
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ install_path }}/{{ item }}"
+      loop: ['./version.txt']
+
+    - name: Install station scripts
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ install_path }}/{{ item }}"
+        mode: '755'
+      loop: ['./init.sh']
+
+    - name: Install Basic Station service
+      ansible.builtin.copy:
+        src: ./basicstation.service
+        dest: /etc/systemd/system/basicstation.service
+
+    - name: facts
+      debug:
+        msg: "{{ eui }}"
+
+    - name: local test
+      become: yes
+      become_user: "{{ lookup('env', 'USER') }}"
+      local_action:
+        module: shell
+        cmd: ls
+
+    - name: Register gateway with AWS
+      ansible.builtin.script: ./aws-register-gateway.sh
+      become: yes
+      become_user: "{{ lookup('env', 'USER') }}"
+      delegate_to: localhost
+      environment:
+        GATEWAY_EUI: "{{ eui }}"
+        GATEWAY_NAME: "{{ gateway_name }}"
+        AWS_REGION: us-east-1
+
+    - name: Installing AWS secrets
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ install_path }}/{{ item }}"
+      loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
+
+    - name: Start Basic Station service
+      ansible.builtin.systemd:
+        name: basicstation
+        daemon_reload: yes
+        enabled: yes
+        state: started
+        masked: no
