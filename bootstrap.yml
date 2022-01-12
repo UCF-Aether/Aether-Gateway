@@ -131,7 +131,7 @@
         src: ./basicstation.service
         dest: /etc/systemd/system/basicstation.service
 
-    - name: facts
+    - name: Gateway EUI
       debug:
         msg: "{{ eui }}"
 
