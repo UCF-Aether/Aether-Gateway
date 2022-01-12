@@ -40,7 +40,7 @@ chmod 755 init.sh
 mkdir -p $temp_dir
 cd $temp_dir
 
-git clone https://github.com/lorabasics/basicstation
+git clone -b alarm-rpi3 https://github.com/UCF-Aether/basicstation.git
 cd ./basicstation
 
 # Make to download dependencies
