@@ -191,6 +191,7 @@
         src: "./{{ item }}"
         dest: "{{ install_path }}/{{ item }}"
       loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
+      when: aws_register is undefined or aws_register is truthy
 
     - name: Start Basic Station service
       ansible.builtin.systemd:

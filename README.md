@@ -32,6 +32,12 @@ The user you wish to use for deploying the gateway and credentials should have a
 
 Next, if the account doesn't have an IAM role to manage IoT Core credentials (`IoTWirelessGatewayCertManagerRole`), follow [these](https://catalog.us-east-1.prod.workshops.aws/v2/workshops/b95a6659-bd4f-4567-8307-bddb43a608c4/en-US/200-gateway/250-add-cups-role) instructions.
 
+#### Bootstrapping Your Account
+In order to register devices with AWS, you need to bootstrap your account. Run the script:
+```sh
+./scripts/aws-bootstrap.sh
+```
+
 ## Creating the Installation Media
 The script `mksd.sh` is responsible for automatically creating the Arch Linux ARM bootable SD card for the Raspberry Pi 3.
 
@@ -96,3 +102,11 @@ Now, all that's left is to run ansible. To install everything on the Pi, run:
 `ansible-playbook -u alarm --ask-pass -i <ip>, -K bootstrap.yml -e "gateway_name=<gwname>"`
 
 Where, `<ip>` is the Pi IP address and `<gwname>` is the name you want for the gateway. NOTE: it's important to have a comma `,` after the IP! When ansible-playbook runs, it'll ask you for the shell and root password. Those are the defaults previously mentioned (`alarm` and `root`).
+
+#### Ansible Variable Options
+The bootstrap playbook has some variables that can overridden, like the gateway name (although, that
+one is required). Below are the available variables. Add them to the `-e` argument in the
+`ansible-playbook` command, separated by a space.
+
+- `aws_register` [truthy]: Select to register with AWS or not.
+- `gw_eui` [string]: Override the gateway EUI. Assumes the gateway is already registered with AWS.
