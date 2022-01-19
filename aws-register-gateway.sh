@@ -11,11 +11,26 @@ set -e
 [[ -z "$GATEWAY_NAME" ]] && echo "GATEWAY_NAME is required" && exit 1
 [[ -z "$AWS_REGION" ]] && echo "AWS_REGION is required" && exit 1
 
-echo "Creating gateway"
-gateway=$(aws iotwireless create-wireless-gateway \
-  --name $GATEWAY_NAME \
-  --tags Key=application,Value=aether \
-  --lorawan GatewayEui=$GATEWAY_EUI,RfRegion="US915")
+gateway=""
+existing_gateway=$(aws iotwireless get-wireless-gateway \
+  --identifier $GATEWAY_EUI \
+  --identifier-type GatewayEui)
+
+if [[ -z "$existing_gateway" ]]; then
+  echo "Creating gateway"
+  gateway=$(aws iotwireless create-wireless-gateway \
+    --name $GATEWAY_NAME \
+    --tags Key=application,Value=aether \
+    --lorawan GatewayEui=$GATEWAY_EUI,RfRegion="US915")
+else
+  echo "Reusing existing gateway" 
+  gateway=$existing_gateway
+  gateway_id=$(echo $gateway | jq -r '.Id')
+  echo "Disassociating certificates"
+  cert_id=$(aws iotwireless get-wireless-gateway-certificate --id $gateway_id | jq -r '.IotCertificateId')
+  aws iotwireless disassociate-wireless-gateway-from-certificate --id $gateway_id
+  aws iot delete-certificate --id $cert_id
+fi
 
 echo $gateway
 gateway_id=$(echo $gateway | jq -r '.Id')

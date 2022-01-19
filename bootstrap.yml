@@ -51,6 +51,7 @@
         state: present
         name:
           - inetutils
+          - python-pip
           - sudo
           - man
           - ntp
@@ -71,11 +72,20 @@
           - raspberrypi-firmware
           - i2c-tools
           - lm_sensors
+          - cronie
+
+    - name: Install Python dependencies
+      ansible.builtin.pip:
+        name:
+          - pynmea2
 
     - name: Configure time
       ansible.builtin.shell: |
         timedatectl set-timezone UTC
         timedatectl set-ntp true
+
+    - name: Set as default locale
+      command: localectl set-locale LANG=en_US.UTF-8
 
     - name: Reboot system for changes to take effect
       ansible.builtin.reboot:
@@ -124,7 +134,13 @@
         src: "{{ item }}"
         dest: "{{ install_path }}/{{ item }}"
         mode: '755'
-      loop: ['./init.sh']
+      loop: ['./init.sh', './gps.py']
+
+    - name: Setup Gateway GPS cronjob
+      ansible.builtin.cron:
+        name: "Update gateway GPS location"
+        minute: "15"
+        job: "python {{ install_path }}/gps.py"
 
     - name: Install Basic Station service
       ansible.builtin.copy:
@@ -135,28 +151,24 @@
       debug:
         msg: "{{ eui }}"
 
-    - name: local test
-      become: yes
-      become_user: "{{ lookup('env', 'USER') }}"
-      local_action:
-        module: shell
-        cmd: ls
+    - name: Configure with AWS
+      block:
+        - name: Register gateway with AWS
+          ansible.builtin.script: ./aws-register-gateway.sh
+          become: yes
+          become_user: "{{ lookup('env', 'USER') }}"
+          delegate_to: localhost
+          environment:
+            GATEWAY_EUI: "{{ eui }}"
+            GATEWAY_NAME: "{{ gateway_name }}"
+            AWS_REGION: us-east-1
 
-    - name: Register gateway with AWS
-      ansible.builtin.script: ./aws-register-gateway.sh
-      become: yes
-      become_user: "{{ lookup('env', 'USER') }}"
-      delegate_to: localhost
-      environment:
-        GATEWAY_EUI: "{{ eui }}"
-        GATEWAY_NAME: "{{ gateway_name }}"
-        AWS_REGION: us-east-1
-
-    - name: Installing AWS secrets
-      ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "{{ install_path }}/{{ item }}"
-      loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
+        - name: Installing AWS secrets
+          ansible.builtin.copy:
+            src: "{{ item }}"
+            dest: "{{ install_path }}/{{ item }}"
+          loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
+      when: aws_register is undefined or aws_register is truthy
 
     - name: Start Basic Station service
       ansible.builtin.systemd:
