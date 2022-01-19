@@ -33,12 +33,12 @@
   tasks:
     - name: Install boot config
       ansible.builtin.copy:
-        src: ./config.txt
+        src: ./sys/config.txt
         dest: /boot/config.txt
 
     - name: Install kernel cmdline args
       ansible.builtin.copy:
-        src: ./cmdline.txt
+        src: ./sys/cmdline.txt
         dest: /boot/cmdline.txt
 
     - name: Update system
@@ -79,6 +79,13 @@
         name:
           - pynmea2
 
+    - name: Enable systemd services
+      ansible.builtin.systemd:
+        state: started
+        name: "{{ item }}"
+      loop: 
+        - cronie
+
     - name: Configure time
       ansible.builtin.shell: |
         timedatectl set-timezone UTC
@@ -100,75 +107,90 @@
     install_path: /etc/aether
 
   tasks:
-    - name: Generate gateway EUI
-      ansible.builtin.shell: |
-        RAND_MAC=$(dd if=/dev/urandom bs=1024 count=1 2>/dev/null|md5sum|sed 's/^\(..\)\(..\)\(..\)\(..\)\(..\)\(..\).*$/\1:\2:\3:\4:\5:\6/')
-        GATEWAY_EUI=$(echo $RAND_MAC | awk -F\: '{print $1$2$3"FFFE"$4$5$6}')
-        GATEWAY_EUI=${GATEWAY_EUI^^}
-        echo $GATEWAY_EUI
+    - name: Set gateway EUI
+      when: gw_eui is undefined
+      block:
+        - name: Generate gateway EUI
+          ansible.builtin.script: ./scripts/geneui.sh
+          register: eui
 
-      register: eui
-
-    - name: Set fact 
-      set_fact:
-        eui: "{{ eui.stdout }}"
+        - name: Set fact 
+          set_fact:
+            gw_eui: "{{ eui.stdout | trim }}"
 
     - name: Install Basic Station
-      ansible.builtin.script: ./install-basicstation.sh
+      ansible.builtin.script: ./scripts/install-basicstation.sh
       args:
         creates: /usr/bin/station
 
     - name: Install templated station config
       ansible.builtin.template:
-        src: ./station.j2
+        src: ./gateway/station.j2
         dest: "{{ install_path }}/station.conf"
 
     - name: Install remaining station config
       ansible.builtin.copy:
-        src: "{{ item }}"
+        src: "./gateway/{{ item }}"
         dest: "{{ install_path }}/{{ item }}"
-      loop: ['./version.txt']
+      loop: [version.txt]
 
     - name: Install station scripts
       ansible.builtin.copy:
-        src: "{{ item }}"
-        dest: "{{ install_path }}/{{ item }}"
+        src: "./gateway/scripts/{{ item }}"
+        dest: "{{ install_path }}/scripts/{{ item }}"
         mode: '755'
-      loop: ['./init.sh', './gps.py']
+      loop: ['init.sh', 'gps.py']
 
     - name: Setup Gateway GPS cronjob
       ansible.builtin.cron:
         name: "Update gateway GPS location"
         minute: "15"
-        job: "python {{ install_path }}/gps.py"
+        job: "python {{ install_path }}/scripts/gps.py"
+
+    - name: Make Basic Station command FIFO
+      ansible.builtin.shell: "mkfifo {{ install_path }}/cmd.fifo"
+      ignore_errors: yes
 
     - name: Install Basic Station service
       ansible.builtin.copy:
-        src: ./basicstation.service
+        src: ./gateway/basicstation.service
         dest: /etc/systemd/system/basicstation.service
 
     - name: Gateway EUI
       debug:
-        msg: "{{ eui }}"
+        msg: "{{ gw_eui }}"
 
     - name: Configure with AWS
       block:
-        - name: Register gateway with AWS
-          ansible.builtin.script: ./aws-register-gateway.sh
-          become: yes
-          become_user: "{{ lookup('env', 'USER') }}"
-          delegate_to: localhost
-          environment:
-            GATEWAY_EUI: "{{ eui }}"
-            GATEWAY_NAME: "{{ gateway_name }}"
-            AWS_REGION: us-east-1
+        - name: Checking if gateway already exists
+          ansible.builtin.shell: "./scripts/aws-does-gw-exist.sh {{ gw_eui }}"
+          register: gateway_exists
 
-        - name: Installing AWS secrets
-          ansible.builtin.copy:
-            src: "{{ item }}"
-            dest: "{{ install_path }}/{{ item }}"
-          loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
+        # TODO: Add prompt later
+        - name: Updating existing gateway with AWS
+          ansible.builtin.script: ./scripts/aws-register-gateway.sh
+          environment:
+            EXISTS: "1"
+          when: "'true' in gateway_exists.stdout"
+
+        - name: Register gateway with AWS
+          ansible.builtin.script: ./scripts/aws-register-gateway.sh
+          when: "'false' in gateway_exists.stdout"
+
       when: aws_register is undefined or aws_register is truthy
+      become: yes
+      become_user: "{{ lookup('env', 'USER') }}"
+      delegate_to: localhost
+      environment:
+        GATEWAY_EUI: "{{ gw_eui }}"
+        GATEWAY_NAME: "{{ gateway_name }}"
+        AWS_REGION: us-east-1
+
+    - name: Installing AWS secrets
+      ansible.builtin.copy:
+        src: "./{{ item }}"
+        dest: "{{ install_path }}/{{ item }}"
+      loop: ['cups.crt', 'cups.key', 'cups.trust', 'cups.uri', 'lns.trust', 'lns.uri']
 
     - name: Start Basic Station service
       ansible.builtin.systemd:
