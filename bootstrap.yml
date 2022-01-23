@@ -118,6 +118,10 @@
           set_fact:
             gw_eui: "{{ eui.stdout | trim }}"
 
+    - name: Gateway EUI
+      debug:
+        msg: "{{ gw_eui }}"
+
     - name: Install Basic Station
       ansible.builtin.script: ./scripts/install-basicstation.sh
       args:
@@ -133,6 +137,12 @@
         src: "./gateway/{{ item }}"
         dest: "{{ install_path }}/{{ item }}"
       loop: [version.txt]
+
+    - name: Create scripts directory
+      ansible.builtin.file:
+        path: "{{ install_path }}/scripts/"
+        recurse: true
+        state: directory
 
     - name: Install station scripts
       ansible.builtin.copy:
@@ -155,10 +165,6 @@
       ansible.builtin.copy:
         src: ./gateway/basicstation.service
         dest: /etc/systemd/system/basicstation.service
-
-    - name: Gateway EUI
-      debug:
-        msg: "{{ gw_eui }}"
 
     - name: Configure with AWS
       block:
