@@ -110,3 +110,23 @@ one is required). Below are the available variables. Add them to the `-e` argume
 
 - `aws_register` [truthy]: Select to register with AWS or not.
 - `gw_eui` [string]: Override the gateway EUI. Assumes the gateway is already registered with AWS.
+
+### Deploying Gateway to another AWS Account
+It's possible to redeploy the gateway to another AWS account without having to run ansible. To do
+this, you'll need to use the `scripts/aws-register-gateway.sh` script. You can set the AWS
+environment variables along with the environment variables needed for the script. Below is the
+example usage. If the gateway already exists, you should pass `EXISTS=1` too. This will disassociate
+the AWS certificates and generate new ones for the gateway.
+
+#### Required Environment Variables
+- `GATEWAY_EUI` : The EUI of the gateway to deploy
+- `GATEWAY_NAME` : The name of the gateway to deploy
+- `AWS_REGION` : The AWS region to deploy to
+
+```sh 
+GATEWAY_EUI=<gweui> GATEWAY_NAME=<name> AWS_REGION=<region> AWS_PROFILE=<profile> ./scripts/aws-register-gateway.sh
+```
+
+```sh 
+EXISTS=1 GATEWAY_EUI=<gweui> GATEWAY_NAME=<name> AWS_REGION=<region> AWS_PROFILE=<profile> ./scripts/aws-register-gateway.sh
+```
