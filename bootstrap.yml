@@ -1,4 +1,5 @@
 ---
+# TODO: proper permissions (users and groups + sudo)
 - name: Bootstrap RPi LoRaWAN Basic Station gateway
   hosts: all
   remote_user: alarm
@@ -73,20 +74,43 @@
           - i2c-tools
           - lm_sensors
           - cronie
+          - tmux
+          - neovim
+          - dnsmasq
+          - dhcpcd
+          - nodejs
+          - npm
+          - hostapd
 
     - name: Install Python dependencies
       ansible.builtin.pip:
         name:
           - pynmea2
 
+    - name: Install root tool configs
+      ansible.builtin.copy:
+        src: "./sys/{{ item }}"
+        dest: "~/{{ item }}"
+      loop:
+        - .tmux.conf
+
+    - name: Install user "alarm" tool configs
+      ansible.builtin.copy:
+        src: "./sys/{{ item }}"
+        dest: "/home/alarm/{{ item }}"
+      loop:
+        - .tmux.conf
+
+
     - name: Enable systemd services
       ansible.builtin.systemd:
+        enabled: yes
         state: started
         name: "{{ item }}"
       loop: 
         - cronie
 
-    - name: Configure time
+    - name: Set to UTC
       ansible.builtin.shell: |
         timedatectl set-timezone UTC
         timedatectl set-ntp true
@@ -96,6 +120,7 @@
 
     - name: Reboot system for changes to take effect
       ansible.builtin.reboot:
+
 
 - name: Install Basic Station
   hosts: all
@@ -212,3 +237,65 @@
         enabled: yes
         state: started
         masked: no
+
+
+- name: Configure networking tools
+  hosts: all
+  remote_user: alarm
+  become: yes
+  become_method: su
+  become_user: root
+
+  tasks:
+    # Disable dns stub listener
+    # Add fallback DNSes 
+    # Default file has these commented out under [Resolve]
+    - name: Configure systemd-resolved and systemd-networkd
+      ansible.builtin.shell: |
+        sed -E -i 's/#(DNSStubListener=)yes/\1no/' /etc/systemd/resolved.conf
+        sed -E -i 's/#(FallbackDNS.*)/\1/' /etc/systemd/resolved.conf
+        systemctl restart systemd-resolved
+        systemctl disable systemd-networkd
+
+    - name: Download and install raspberry-wifi-conf tool
+      args:
+        creates: /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+      ansible.builtin.shell: |
+        cd /root
+        git clone https://github.com/UCF-Aether/raspberry-wifi-conf.git
+        cd raspberry-wifi-conf
+        npm i -g bower
+        npm install
+        npm update
+        bower install
+        npm run install:timer
+        echo "update_config=1
+        country=US
+
+        network={
+        }" > /etc/wpa_supplicant/wpa_supplicant-wlan0.conf
+        systemctl enable wifi-ap-mon.timer
+
+    - name: Enable systemd services
+      ansible.builtin.systemd:
+        daemon_reload: true
+        enabled: yes
+        state: started
+        name: "{{ item }}"
+      loop: 
+        - dnsmasq
+        - dhcpcd
+        - hostapd
+        - wpa_supplicant@wlan0
+
+    - name: Restart systemd services for sanity
+      ansible.builtin.systemd:
+        daemon_reload: true
+        enabled: yes
+        state: restarted
+        name: "{{ item }}"
+      loop: 
+        - dnsmasq
+        - dhcpcd
+        - hostapd
+        - wpa_supplicant@wlan0
