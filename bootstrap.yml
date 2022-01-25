@@ -127,6 +127,12 @@
       args:
         creates: /usr/bin/station
 
+    - name: Create aether config directory /etc/aether/
+      ansible.builtin.file:
+        path: "{{ install_path }}"
+        recurse: true
+        state: directory
+
     - name: Install templated station config
       ansible.builtin.template:
         src: ./gateway/station.j2
