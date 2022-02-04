@@ -1,4 +1,5 @@
 
+# Should've used Python...
 # Check if aws cli is installed
 if ! command -v aws &> /dev/null; then
     echo "The AWS CLI is required"
@@ -10,6 +11,9 @@ set -e
 get_gw_id() {
   echo $1 | jq -r '.Id'
 }
+
+subbands=1
+rfregion=US915
 
 gateway_thing_group_name="gateways"
 gateway_thing_type_name="gateway"
@@ -30,7 +34,7 @@ if [[ -z "$EXISTS" ]]; then
   gateway=$(aws iotwireless create-wireless-gateway \
     --name $GATEWAY_NAME \
     --tags Key=application,Value=aether \
-    --lorawan GatewayEui=$GATEWAY_EUI,RfRegion="US915")
+    --lorawan GatewayEui=$GATEWAY_EUI,RfRegion="$rfregion",SubBands=$subbands)
   gateway_id=$(get_gw_id "$gateway")
 
   echo "Creating thing for gateway"
